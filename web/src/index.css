@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/*
+ * No manual `* { margin:0; padding:0 }` reset here.
+ * Tailwind v4's preflight already sets box-sizing + resets margins inside a
+ * cascade layer, so utilities (mx-auto, px-6, p-6, mb-*) still apply. A raw
+ * unlayered `*` reset would beat those utilities and break all centering/spacing.
+ */
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
