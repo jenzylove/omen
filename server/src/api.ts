@@ -6,8 +6,9 @@
  *   GET /api/forecasts/:id      → single forecast by channelId
  *   GET /api/events             → SSE stream; emits {type:"forecast", data} on every new run
  *
- * Started alongside the Bolt Socket Mode app in app.ts.
- * No extra framework — raw Node http so there's nothing new to install.
+ * Auth: all mutation endpoints require X-API-Key header matching OMEN_API_KEY env var.
+ * GET endpoints are unauthenticated (read-only) for the demo dashboard.
+ * Set OMEN_API_KEY to a non-empty value to enable auth.
  */
 import http from "node:http";
 import { getAllForecasts, getForecast, onForecastSaved } from "./store.js";
@@ -15,6 +16,27 @@ import type { FailureForecast } from "./types.js";
 
 type SSEClient = http.ServerResponse;
 const clients = new Set<SSEClient>();
+
+const API_KEY = process.env.OMEN_API_KEY || "";
+
+function isAuthorized(req: http.IncomingMessage): boolean {
+  if (!API_KEY) return true; // no key configured = open (local dev)
+  return req.headers["x-api-key"] === API_KEY;
+}
+
+const ALLOWED_ORIGIN = process.env.OMEN_ALLOWED_ORIGIN || "*";
+
+function setCors(res: http.ServerResponse): void {
+  res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-API-Key");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+}
+
+function unauthorized(res: http.ServerResponse): void {
+  setCors(res);
+  res.writeHead(401, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "unauthorized" }));
+}
 
 /** Called by the store whenever a forecast is saved — pushes to all SSE subscribers. */
 function broadcast(forecast: FailureForecast): void {
@@ -33,17 +55,25 @@ onForecastSaved(broadcast);
 
 function json(res: http.ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body);
-  res.writeHead(status, {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-  });
+  res.writeHead(status, { "Content-Type": "application/json" });
+  setCors(res);
   res.end(data);
 }
 
 function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
+    let size = 0;
+    const MAX = 1024 * 100; // 100KB body limit
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX) {
+        req.destroy();
+        resolve({ error: "payload too large" });
+        return;
+      }
+      raw += chunk;
+    });
     req.on("end", () => {
       try {
         resolve(raw ? JSON.parse(raw) : {});
@@ -62,21 +92,52 @@ export interface ApiOptions {
 }
 
 export function createApiServer(port: number, opts: ApiOptions): http.Server {
+  const requestCounts = new Map<string, number>();
+  const RATE_LIMIT = 10; // max requests per IP per window
+  const RATE_WINDOW_MS = 60_000; // 1 minute window
+
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
     const path = url.pathname;
+    const ip = req.socket.remoteAddress || "unknown";
+
+    // Rate limiting
+    const now = Date.now();
+    const windowStart = Math.floor(now / RATE_WINDOW_MS);
+    const rateKey = `${ip}:${windowStart}`;
+    const current = requestCounts.get(rateKey) || 0;
+    requestCounts.set(rateKey, current + 1);
+    // Clean old entries every 100 requests
+    if (current === 0 && requestCounts.size > 100) {
+      for (const [k] of requestCounts) {
+        const ts = parseInt(k.split(":")[1], 10);
+        if (Math.floor(now / RATE_WINDOW_MS) - ts > 2) requestCounts.delete(k);
+      }
+    }
 
     // CORS preflight
     if (req.method === "OPTIONS") {
-      res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" });
+      setCors(res);
+      res.writeHead(204);
       res.end();
       return;
     }
 
     // POST /api/forecast  — trigger/re-run a forecast from the dashboard
     if (req.method === "POST" && path === "/api/forecast") {
+      if (!isAuthorized(req)) return void unauthorized(res);
+
+      // Rate limit POST only
+      if (current >= RATE_LIMIT) {
+        res.writeHead(429, { "Content-Type": "application/json" });
+        setCors(res);
+        res.end(JSON.stringify({ error: "too many requests" }));
+        return;
+      }
+
       void (async () => {
         const body = await readJsonBody(req);
+        if (body.error) return json(res, 400, { error: "payload too large" });
         const launchName = String(body.launchName ?? "").trim();
         if (!launchName) return json(res, 400, { error: "launchName required" });
         const channelId =
@@ -107,16 +168,15 @@ export function createApiServer(port: number, opts: ApiOptions): http.Server {
         : json(res, 404, { error: "not found" });
     }
 
-    // GET /api/events  — SSE
+    // GET /api/events  — SSE (read-only, no auth required)
     if (req.method === "GET" && path === "/api/events") {
+      setCors(res);
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
-        "Access-Control-Allow-Origin": "*",
       });
       res.write(": connected\n\n");
-      clients.add(res);
 
       // Send current state immediately so the dashboard doesn't start blank
       const all = getAllForecasts();
@@ -124,7 +184,23 @@ export function createApiServer(port: number, opts: ApiOptions): http.Server {
         res.write(`data: ${JSON.stringify({ type: "init", data: all })}\n\n`);
       }
 
+      clients.add(res);
       req.on("close", () => clients.delete(res));
+
+      // Heartbeat every 30s to detect dead connections
+      const heartbeat = setInterval(() => {
+        try {
+          res.write(": heartbeat\n\n");
+        } catch {
+          clearInterval(heartbeat);
+          clients.delete(res);
+        }
+      }, 30_000);
+
+      req.on("close", () => {
+        clearInterval(heartbeat);
+        clients.delete(res);
+      });
       return;
     }
 
