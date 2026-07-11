@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+src/App.css
+src/assets/react.svg
+src/assets/vite.svg
+src/assets/hero.png
 
 # Editor directories and files
 .vscode/*

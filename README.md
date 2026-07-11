@@ -34,22 +34,61 @@ as its surface. We're deliberate about which is which:
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph Surfaces
+        SL["💬 Slack<br/>/omen · App Home"]
+        WEB["🖥️ React Dashboard<br/>Landing · Launch Radar"]
+    end
+
+    subgraph Server["Omen Server · Node"]
+        BOLT["app.ts<br/>Bolt · Socket Mode"]
+        API["api.ts<br/>REST + SSE · auth · rate-limit"]
+        ENGINE["engine/index.ts<br/>generateForecast()"]
+        STORE[("store.ts<br/>SQLite · survives restart")]
+    end
+
+    subgraph Grounding["3 grounding legs · each tagged live / demo"]
+        SR["Slack reader<br/>channel context + drift"]
+        MCP["GitHub via MCP<br/>local stdio · or official remote"]
+        TAV["Tavily<br/>real-time comparable failures"]
+    end
+
+    CLAUDE["🔮 Claude Opus<br/>emit_forecast tool-use"]
+
+    SL --> BOLT --> ENGINE
+    WEB -->|"POST /api/forecast"| API --> ENGINE
+    ENGINE --> SR & MCP & TAV
+    SR & MCP & TAV -->|"grounding context"| CLAUDE -->|"ranked failure modes"| ENGINE
+    ENGINE --> STORE
+    STORE -->|"SSE /api/events"| WEB
+    ENGINE -->|"Block Kit forecast"| SL
+```
+
+The **drift → risk linkage** is the signature move: the Slack reader detects scope
+additions, and Claude ties each one to the specific failure mode it will cause.
+
+<details>
+<summary><b>File layout</b></summary>
+
 ```
 server/src/
   types.ts            # FailureForecast contract — the spine
   mcp/
     github-server.ts  # real MCP server (stdio) exposing GitHub as a tool
-    github-client.ts  # MCP client the engine uses to call it
+    github-client.ts  # MCP client the engine uses to call it (local or remote)
   engine/
     grounding.ts      # gather context: Slack + GitHub(MCP) + Tavily search
     forecast.ts       # Claude (claude-opus-4-8) → ranked, cited failure modes
     index.ts          # orchestrator: generateForecast()
     fixtures.ts       # demo seed / offline fallback
   render/blocks.ts    # Block Kit: readiness score + failure cards
-  api.ts              # REST + SSE feed for the dashboard
+  store.ts            # SQLite persistence + SSE broadcast hook
+  api.ts              # REST + SSE feed for the dashboard (auth, CORS, rate-limit)
   app.ts              # Bolt (Socket Mode): /omen command
-web/                  # React dashboard (live SSE, readiness gauge)
+web/                  # React dashboard (routing, live SSE, readiness gauge)
 ```
+</details>
 
 ## Run it
 

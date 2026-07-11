@@ -101,19 +101,11 @@ export function createApiServer(port: number, opts: ApiOptions): http.Server {
     const path = url.pathname;
     const ip = req.socket.remoteAddress || "unknown";
 
-    // Rate limiting
+    // Rate-limit bookkeeping — enforced on POST only (see below). Use "|" not ":"
+    // as the separator so IPv6 addresses (e.g. "::1") don't corrupt the window key.
     const now = Date.now();
     const windowStart = Math.floor(now / RATE_WINDOW_MS);
-    const rateKey = `${ip}:${windowStart}`;
-    const current = requestCounts.get(rateKey) || 0;
-    requestCounts.set(rateKey, current + 1);
-    // Clean old entries every 100 requests
-    if (current === 0 && requestCounts.size > 100) {
-      for (const [k] of requestCounts) {
-        const ts = parseInt(k.split(":")[1], 10);
-        if (Math.floor(now / RATE_WINDOW_MS) - ts > 2) requestCounts.delete(k);
-      }
-    }
+    const rateKey = `${ip}|${windowStart}`;
 
     // CORS preflight
     if (req.method === "OPTIONS") {
@@ -127,12 +119,22 @@ export function createApiServer(port: number, opts: ApiOptions): http.Server {
     if (req.method === "POST" && path === "/api/forecast") {
       if (!isAuthorized(req)) return void unauthorized(res);
 
-      // Rate limit POST only
+      // Rate limit POST only — GET/SSE traffic must not consume the budget,
+      // or a dashboard that reconnects a few times would 429 a legit re-run.
+      const current = requestCounts.get(rateKey) || 0;
       if (current >= RATE_LIMIT) {
         res.writeHead(429, { "Content-Type": "application/json" });
         setCors(res);
         res.end(JSON.stringify({ error: "too many requests" }));
         return;
+      }
+      requestCounts.set(rateKey, current + 1);
+      // Opportunistic cleanup of stale windows
+      if (requestCounts.size > 100) {
+        for (const [k] of requestCounts) {
+          const ts = parseInt(k.split("|")[1], 10);
+          if (windowStart - ts > 2) requestCounts.delete(k);
+        }
       }
 
       void (async () => {
