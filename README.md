@@ -121,6 +121,29 @@ credentials are absent.
 | `TAVILY_API_KEY` | External comparable failures **via real-time search** |
 | `SLACK_USER_TOKEN` | (optional) Slack message search |
 
+## Deploy (live end-to-end)
+
+The frontend is a static Vite SPA; the backend is a Node service (dashboard API +
+Slack Socket Mode). Deploy them separately.
+
+**1. Backend → Render (or Railway).** The API must own the platform's `$PORT` — the
+code already does this (`app.ts`), and Socket Mode connects out to Slack with no
+public port. On Render, use the included `render.yaml` blueprint; on Railway, point
+at the repo with root `server/`, build `npm install && npm run build`, start `npm start`.
+Set at minimum `ANTHROPIC_API_KEY`. For a public deploy, also set:
+- `OMEN_API_KEY` — gates `POST /api/forecast` so strangers can't burn your credits
+- `OMEN_ALLOWED_ORIGIN` — your Vercel URL, e.g. `https://omen.vercel.app`
+
+**2. Frontend → Vercel.** Root directory `web/`. Vercel auto-detects Vite; `vercel.json`
+handles SPA routing. Set env vars:
+- `VITE_API_URL` — your backend URL, e.g. `https://omen-api.onrender.com`
+- `VITE_OMEN_API_KEY` — same value as the backend's `OMEN_API_KEY` (if you set one)
+
+> **Note:** `VITE_OMEN_API_KEY` ships in the client bundle, so it's abuse-deterrence
+> (paired with the server's 10 req/min/IP rate limit + CORS lock), not a true secret.
+> Rotate or blank it after judging. The free-tier DB is ephemeral — it re-seeds the
+> demo forecasts on redeploy, so the radar is never blank.
+
 ---
 
 ## 🎬 Demo run-of-show (submission video)

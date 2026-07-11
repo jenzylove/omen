@@ -55,8 +55,10 @@ onForecastSaved(broadcast);
 
 function json(res: http.ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body);
-  res.writeHead(status, { "Content-Type": "application/json" });
+  // CORS headers must be set BEFORE writeHead — setHeader() throws once headers
+  // are flushed, which would crash the request handler.
   setCors(res);
+  res.writeHead(status, { "Content-Type": "application/json" });
   res.end(data);
 }
 
@@ -123,8 +125,8 @@ export function createApiServer(port: number, opts: ApiOptions): http.Server {
       // or a dashboard that reconnects a few times would 429 a legit re-run.
       const current = requestCounts.get(rateKey) || 0;
       if (current >= RATE_LIMIT) {
-        res.writeHead(429, { "Content-Type": "application/json" });
         setCors(res);
+        res.writeHead(429, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "too many requests" }));
         return;
       }

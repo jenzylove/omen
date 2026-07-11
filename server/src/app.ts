@@ -188,8 +188,12 @@ app.action("omen_view_forecast", async ({ ack, action, client, body }) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-const port = Number(process.env.PORT) || 3000;
-const apiPort = Number(process.env.API_PORT) || 3001;
+// The dashboard API must own the platform's public port ($PORT on Railway/Render),
+// since that's the one URL the hosted frontend can reach. Bolt runs Socket Mode —
+// it connects OUT to Slack over a WebSocket and never needs a public inbound port,
+// so it gets its own separate internal port and never contends for $PORT.
+const apiPort = Number(process.env.PORT) || Number(process.env.API_PORT) || 3001;
+const boltPort = Number(process.env.BOLT_PORT) || 3000;
 
 // Bring up the dashboard API + seed data FIRST, so the web dashboard works even
 // if Slack credentials are missing/invalid (the Socket Mode app is optional).
@@ -204,8 +208,8 @@ createApiServer(apiPort, {
 });
 
 try {
-  await app.start(port);
-  console.log(`🔮 Omen is watching. (Slack Socket Mode :${port}, API :${apiPort})`);
+  await app.start(boltPort);
+  console.log(`🔮 Omen is watching. (Slack Socket Mode :${boltPort}, API :${apiPort})`);
 } catch (err) {
   console.warn(
     `⚠️  Slack Socket Mode failed to start — dashboard/API still running on :${apiPort}.`,

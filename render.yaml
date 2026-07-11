@@ -1,0 +1,37 @@
+# Render blueprint for the Omen backend (dashboard API + Slack Socket Mode).
+# Deploy: New → Blueprint → point at this repo. Render builds from server/.
+# The public URL Render gives you is what you set as VITE_API_URL on Vercel.
+services:
+  - type: web
+    name: omen-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/forecasts
+    envVars:
+      # Required for live forecast synthesis
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Gate the forecast endpoint (recommended for a public deploy). Must match
+      # VITE_OMEN_API_KEY on the frontend. Rotate/blank after judging.
+      - key: OMEN_API_KEY
+        sync: false
+      # Lock CORS to your Vercel origin, e.g. https://omen.vercel.app
+      - key: OMEN_ALLOWED_ORIGIN
+        sync: false
+      # Grounding legs (optional — each degrades to demo if unset)
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        sync: false
+      # Slack (optional — only if you want /omen + App Home live from the host)
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: SLACK_APP_TOKEN
+        sync: false

@@ -4,6 +4,9 @@
   "private": true,
   "description": "Omen — a Slack agent that forecasts how your launch will fail before it ships.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx watch src/app.ts",
     "preview": "tsx src/preview.ts",
