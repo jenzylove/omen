@@ -218,7 +218,7 @@ function DashboardPreview({ onOpen }: { onOpen: () => void }) {
           <span className="w-3 h-3 rounded-full bg-slate-600" />
         </div>
         <div className="flex-1 bg-slate-900 rounded px-3 py-1 text-xs text-slate-500 font-mono">
-          localhost:5173/dashboard
+          omen-delta.vercel.app/dashboard
         </div>
         <span className="text-xs text-slate-500 group-hover:text-violet-400 transition-colors">Open →</span>
       </div>
