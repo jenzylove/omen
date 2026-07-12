@@ -93,8 +93,12 @@ const FORECAST_TOOL: Anthropic.Tool = {
 };
 
 export function computeReadinessScore(modes: FailureMode[]): number {
+  // Each risk point (likelihood × impact, 1–25 per mode) costs one readiness point.
+  // A typical 3–5 mode forecast lands across the range (e.g. two criticals + two
+  // lesser risks ≈ 43) instead of flooring at 0, so the gauge — and the re-run
+  // score diff — actually carry signal. Only an overwhelming forecast hits 0.
   const risk = modes.reduce((sum, m) => sum + m.likelihood * m.impact, 0);
-  return Math.max(0, 100 - Math.min(100, Math.round((risk / 40) * 100)));
+  return Math.max(0, 100 - Math.min(100, risk));
 }
 
 export interface ForecastOptions {
