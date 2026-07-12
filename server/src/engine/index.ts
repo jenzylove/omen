@@ -36,6 +36,7 @@ export async function generateForecast(
   const previous = getForecast(channelId);
   const ctx = await gatherContext(channelId, launchName, {
     slackToken: deps.slackToken,
+    slackUserToken: deps.slackUserToken,
     githubToken: deps.githubToken,
     githubRepo: deps.githubRepo,
   });

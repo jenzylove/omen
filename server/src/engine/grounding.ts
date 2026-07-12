@@ -14,8 +14,7 @@
  * ran live vs demo in `provenance` so the UI never presents seed data as real.
  */
 import { WebClient } from "@slack/web-api";
-import type { GroundingContext, Provenance } from "../types.js";
-import { SAMPLE_CONTEXT } from "./fixtures.js";
+import type { Evidence, GroundingContext, Provenance } from "../types.js";
 import { readChannel } from "./slack-reader.js";
 import { extractKeywords } from "./github-reader.js";
 import { gatherInternalHistoryViaMCP } from "../mcp/github-client.js";
@@ -42,8 +41,11 @@ export async function gatherContext(
   };
 
   // ── Leg 1: Slack (conversation + spec baseline) ──────────────────────────
-  let conversation = SAMPLE_CONTEXT.conversation;
-  let specBaseline = SAMPLE_CONTEXT.specBaseline;
+  // Default to EMPTY, not demo fixtures — otherwise an unrelated launch typed on
+  // the web would be grounded in the payments seed conversation. Legs only carry
+  // data when a live source actually returns it; each stays tagged demo otherwise.
+  let conversation: GroundingContext["conversation"] = [];
+  let specBaseline: string | undefined;
 
   if (slackToken) {
     try {
@@ -62,7 +64,7 @@ export async function gatherContext(
   const keywords = extractKeywords(conversation);
 
   // ── Leg 2: GitHub via MCP (internal history) ─────────────────────────────
-  let internalHistory = SAMPLE_CONTEXT.internalHistory;
+  let internalHistory: Evidence[] = [];
 
   if (githubToken && githubRepo) {
     try {
@@ -78,7 +80,7 @@ export async function gatherContext(
   }
 
   // ── Leg 3: Real-time search API (Tavily) + optional Slack user search ─────
-  let externalComparables = SAMPLE_CONTEXT.externalComparables;
+  let externalComparables: Evidence[] = [];
 
   try {
     const slackSearch = slackUserToken
