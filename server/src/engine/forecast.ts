@@ -110,7 +110,10 @@ export async function synthesizeForecast(
   ctx: GroundingContext,
   opts: ForecastOptions,
 ): Promise<FailureForecast> {
-  const client = new Anthropic({ apiKey: opts.apiKey });
+  // Bound the call so a stalled request can't hang a forecast for the SDK's
+  // 10-minute default — on a re-run the prompt is larger and free-tier hosts
+  // are memory-tight, which is exactly when a request can hang.
+  const client = new Anthropic({ apiKey: opts.apiKey, timeout: 70_000, maxRetries: 1 });
 
   const userContent = [
     `Launch: ${ctx.launchName}`,

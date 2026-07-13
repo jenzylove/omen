@@ -20,7 +20,12 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { fileURLToPath } from "node:url";
 import type { Evidence } from "../types.js";
 
-const serverPath = fileURLToPath(new URL("./github-server.ts", import.meta.url));
+// Match this module's own extension: .ts when running under tsx (dev), .js in the
+// compiled build (prod). Spawning "./github-server.ts" in prod fails — dist has .js.
+const moduleIsTs = import.meta.url.endsWith(".ts");
+const serverPath = fileURLToPath(
+  new URL(`./github-server${moduleIsTs ? ".ts" : ".js"}`, import.meta.url),
+);
 const REMOTE_MCP_URL = "https://api.githubcopilot.com/mcp/";
 
 /** Cap the whole MCP round-trip so a stalled subprocess/endpoint can't hang a forecast. */
@@ -54,7 +59,8 @@ async function gatherViaLocal(
 ): Promise<Evidence[]> {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ["--import", "tsx", serverPath],
+    // Dev server is TS (needs tsx); the compiled build runs plain JS directly.
+    args: moduleIsTs ? ["--import", "tsx", serverPath] : [serverPath],
     env: { ...getDefaultEnvironment(), GITHUB_TOKEN: githubToken },
     stderr: "inherit",
   });

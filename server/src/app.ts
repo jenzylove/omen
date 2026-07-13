@@ -16,6 +16,7 @@ import type { WebClient } from "@slack/web-api";
 import pkg from "@slack/bolt";
 const { App, LogLevel } = pkg;
 import { generateForecast } from "./engine/index.js";
+import type { FailureForecast } from "./types.js";
 import { forecastBlocks, appHomeBlocks, forecastModal } from "./render/blocks.js";
 import { createApiServer } from "./api.js";
 import { seedDemoData } from "./seed.js";
@@ -44,6 +45,21 @@ const engineDeps = {
   githubRepo: process.env.GITHUB_REPO,
 };
 
+// Hard ceiling so a stalled forecast can never leave the user staring at a
+// spinner — if synthesis exceeds this, the handler reports a retryable error.
+const FORECAST_TIMEOUT_MS = 120_000;
+function generateBounded(channelId: string, launchName: string): Promise<FailureForecast> {
+  return Promise.race([
+    generateForecast(channelId, launchName, engineDeps),
+    new Promise<FailureForecast>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`forecast timed out after ${FORECAST_TIMEOUT_MS}ms`)),
+        FORECAST_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+}
+
 // ── /omen command ─────────────────────────────────────────────────────────────
 
 app.command("/omen", async ({ command, ack, respond, client }) => {
@@ -57,7 +73,7 @@ app.command("/omen", async ({ command, ack, respond, client }) => {
   });
 
   try {
-    const forecast = await generateForecast(command.channel_id, launchName, engineDeps);
+    const forecast = await generateBounded(command.channel_id, launchName);
     saveForecast(forecast);
 
     // Post as a real bot message (not a response_url reply) so the interactive
@@ -144,7 +160,7 @@ app.action("omen_rerun", async ({ ack, action, client, body }) => {
   });
 
   try {
-    const forecast = await generateForecast(channelId, launchName, engineDeps);
+    const forecast = await generateBounded(channelId, launchName);
     saveForecast(forecast);
 
     const rawBody = body as unknown as Record<string, unknown>;
