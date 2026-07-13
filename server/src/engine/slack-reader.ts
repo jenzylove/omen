@@ -33,7 +33,9 @@ export async function readChannel(
   });
 
   const conversation: ConversationMessage[] = (historyRes.messages ?? [])
-    .filter((m) => m.type === "message" && !m.subtype && m.text)
+    // Skip bot messages — including Omen's own past forecasts — so it grounds on
+    // the team's conversation, not its own output (avoids self-citation on re-runs).
+    .filter((m) => m.type === "message" && !m.subtype && !m.bot_id && m.text)
     .reverse() // oldest first
     .map((m) => ({
       user: m.username ?? m.user ?? "unknown",
