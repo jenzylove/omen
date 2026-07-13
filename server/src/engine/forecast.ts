@@ -152,6 +152,10 @@ export async function synthesizeForecast(
     driftSignals: out.driftSignals ?? [],
     personaInsights: out.personaInsights ?? [],
     provenance: ctx.provenance,
+    groundingCounts: {
+      internalHistory: ctx.internalHistory.length,
+      externalComparables: ctx.externalComparables.length,
+    },
     generatedAt: new Date().toISOString(),
   };
 }

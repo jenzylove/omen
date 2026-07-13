@@ -148,10 +148,11 @@ export function ForecastDetail({ forecast, onBack, onRerun }: Props) {
   const ageLabel = age < 1 ? "just now" : age < 60 ? `${age}m ago` : `${Math.round(age / 60)}h ago`;
   const critical = ranked.filter((m) => m.likelihood * m.impact >= 16).length;
 
+  // Prefer the real leg counts; fall back to citation counts for older/seed forecasts.
   const allEvidence = forecast.failureModes.flatMap((m) => m.evidence);
   const counts = {
-    internal: allEvidence.filter((e) => e.source === "internal").length,
-    external: allEvidence.filter((e) => e.source === "external").length,
+    internal: forecast.groundingCounts?.internalHistory ?? allEvidence.filter((e) => e.source === "internal").length,
+    external: forecast.groundingCounts?.externalComparables ?? allEvidence.filter((e) => e.source === "external").length,
   };
 
   // Drift → risk linkage: map each failure mode to its rank (#N) + title, and

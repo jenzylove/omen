@@ -53,6 +53,7 @@ export interface FailureForecast {
   driftSignals: DriftSignal[];
   personaInsights: PersonaInsight[];
   provenance: Provenance;
+  groundingCounts?: { internalHistory: number; externalComparables: number };
   diff?: ForecastDiff;
   generatedAt: string;
 }

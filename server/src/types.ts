@@ -74,6 +74,12 @@ export interface FailureForecast {
   personaInsights: PersonaInsight[];
   /** Which legs ran live vs demo — surfaced in the UI so seed is never faked as real. */
   provenance: Provenance;
+  /**
+   * How many items each grounding leg actually returned. Used for the "N incidents /
+   * N comparables" counts so they reflect the real legs — not how many pieces of
+   * evidence Claude happened to cite (which conflates Slack quotes with GitHub).
+   */
+  groundingCounts?: { internalHistory: number; externalComparables: number };
   /** Populated on re-runs — what changed since last forecast. */
   diff?: ForecastDiff;
   generatedAt: string;

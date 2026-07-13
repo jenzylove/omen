@@ -44,13 +44,13 @@ export async function generateForecast(
   let forecast: FailureForecast;
 
   if (!deps.apiKey) {
-    forecast = { ...SAMPLE_FORECAST, channelId, launchName, provenance: ctx.provenance, generatedAt: new Date().toISOString() };
+    forecast = { ...SAMPLE_FORECAST, channelId, launchName, provenance: ctx.provenance, groundingCounts: { internalHistory: ctx.internalHistory.length, externalComparables: ctx.externalComparables.length }, generatedAt: new Date().toISOString() };
   } else {
     try {
       forecast = await synthesizeForecast(ctx, { apiKey: deps.apiKey, model: deps.model });
     } catch (err) {
       console.error("[omen] forecast synthesis failed, using fixture:", err);
-      forecast = { ...SAMPLE_FORECAST, channelId, launchName, provenance: ctx.provenance, generatedAt: new Date().toISOString() };
+      forecast = { ...SAMPLE_FORECAST, channelId, launchName, provenance: ctx.provenance, groundingCounts: { internalHistory: ctx.internalHistory.length, externalComparables: ctx.externalComparables.length }, generatedAt: new Date().toISOString() };
     }
   }
 

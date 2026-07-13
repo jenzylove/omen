@@ -225,12 +225,14 @@ export function forecastBlocks(
   return blocks;
 }
 
-/** Grounding line with live/demo tags + evidence counts — mirrors the web ProvenanceChips. */
+/** Grounding line with live/demo tags + per-leg counts — mirrors the web ProvenanceChips. */
 function groundingLine(forecast: FailureForecast): string {
   const p = forecast.provenance;
+  // Prefer the real leg counts; fall back to citation counts for older/seed forecasts.
+  const gc = forecast.groundingCounts;
   const evidence = forecast.failureModes.flatMap((m) => m.evidence);
-  const internal = evidence.filter((e) => e.source === "internal").length;
-  const external = evidence.filter((e) => e.source === "external").length;
+  const internal = gc ? gc.internalHistory : evidence.filter((e) => e.source === "internal").length;
+  const external = gc ? gc.externalComparables : evidence.filter((e) => e.source === "external").length;
   const tag = (s: Provenance["conversation"]) => (s === "live" ? "✅ live" : "🧪 demo");
   return [
     "*Grounded in:*",
