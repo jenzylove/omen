@@ -60,9 +60,11 @@ app.command("/omen", async ({ command, ack, respond, client }) => {
     const forecast = await generateForecast(command.channel_id, launchName, engineDeps);
     saveForecast(forecast);
 
-    await respond({
-      response_type: "in_channel",
-      blocks: forecastBlocks(forecast, getAcknowledged(forecast.channelId)),
+    // Post as a real bot message (not a response_url reply) so the interactive
+    // Accept-mitigation / Re-run buttons can reliably chat.update it afterwards.
+    await client.chat.postMessage({
+      channel: command.channel_id,
+      blocks: forecastBlocks(forecast, getAcknowledged(forecast.channelId)) as KnownBlock[],
       text: `Omen forecast for ${launchName}: readiness ${forecast.readinessScore}/100`,
     });
 
@@ -148,14 +150,17 @@ app.action("omen_rerun", async ({ ack, action, client, body }) => {
     const rawBody = body as unknown as Record<string, unknown>;
     const message = rawBody["message"] as Record<string, unknown> | undefined;
     const ts = message?.["ts"] as string | undefined;
+    const blocks = forecastBlocks(forecast, new Set()) as KnownBlock[];
+    const text = `Omen forecast for ${launchName}: readiness ${forecast.readinessScore}/100`;
 
-    if (ts) {
-      await client.chat.update({
-        channel: channelId,
-        ts,
-        blocks: forecastBlocks(forecast, new Set()) as KnownBlock[],
-        text: `Omen forecast for ${launchName}: readiness ${forecast.readinessScore}/100`,
-      });
+    // Update the original forecast in place; if the edit can't be applied, post
+    // the refreshed forecast as a new message so a re-run never dead-ends.
+    try {
+      if (ts) await client.chat.update({ channel: channelId, ts, blocks, text });
+      else await client.chat.postMessage({ channel: channelId, blocks, text });
+    } catch (updateErr) {
+      console.warn("[omen] re-run update failed, posting fresh:", (updateErr as Error).message);
+      await client.chat.postMessage({ channel: channelId, blocks, text });
     }
 
     await refreshAppHome(client, userId);
